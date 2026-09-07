@@ -1,0 +1,377 @@
+/* Requerimientos — vista usuario (complementa admin-act-* y user-board.css) */
+
+.user-req-page {
+  max-width: 1200px;
+}
+
+.user-req-sede-info-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 0.15rem;
+}
+
+.user-req-sede-info-name {
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.user-req-sede-info {
+  align-items: flex-start;
+}
+
+.user-req-demo-banner {
+  font-size: 0.88rem;
+  margin-bottom: 1.25rem;
+}
+
+.user-req-alert-zone:empty {
+  display: none;
+}
+
+.user-req-alert-zone .alert {
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.user-req-grid {
+  align-items: start;
+}
+
+.user-req-form-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.user-req-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.user-req-pill {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.user-req-pill:hover {
+  border-color: #93c5fd;
+  color: #2563eb;
+}
+
+.user-req-pill.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.user-req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.user-req-empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: #64748b;
+}
+
+.user-req-empty i {
+  font-size: 2.25rem;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 0.65rem;
+}
+
+.user-req-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: #fff;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.user-req-item:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+}
+
+.user-req-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.user-req-item-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.user-req-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.user-req-item-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.user-req-item-desc {
+  font-size: 0.86rem;
+  color: #475569;
+  line-height: 1.45;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.user-req-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.user-req-status--pendiente {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.user-req-status--en_tramite {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.user-req-status--cerrado {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.user-req-priority {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.55rem;
+  border-radius: 6px;
+}
+
+.user-req-priority--baja { background: #f1f5f9; color: #64748b; }
+.user-req-priority--media { background: #eff6ff; color: #2563eb; }
+.user-req-priority--alta { background: #fff7ed; color: #c2410c; }
+.user-req-priority--urgente { background: #fef2f2; color: #dc2626; }
+
+.user-req-item-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Adjunto en formulario */
+.user-req-adjunto {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.user-req-adjunto-hint {
+  line-height: 1.4;
+}
+
+.user-req-adjunto-tipo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.user-req-adjunto-tipo-opt {
+  margin: 0;
+  cursor: pointer;
+}
+
+.user-req-adjunto-tipo-opt input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.user-req-adjunto-tipo-opt span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.user-req-adjunto-tipo-opt:hover span {
+  border-color: #93c5fd;
+  color: #2563eb;
+}
+
+.user-req-adjunto-tipo-opt input:checked + span {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.user-req-adjunto-panel {
+  margin-top: 0.15rem;
+}
+
+.user-req-adjunto-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 120px;
+  padding: 1rem;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.user-req-adjunto-drop:hover,
+.user-req-adjunto-drop.is-dragover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.user-req-adjunto-drop-icon {
+  font-size: 1.75rem;
+  color: #64748b;
+}
+
+.user-req-adjunto-drop-text {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.user-req-adjunto-preview {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.user-req-adjunto-preview-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-req-adjunto-preview-media {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-req-adjunto-preview-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-req-adjunto-pdf-icon {
+  font-size: 1.75rem;
+  color: #dc2626;
+}
+
+.user-req-adjunto-preview-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-req-adjunto-preview-name {
+  display: block;
+  font-size: 0.86rem;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.user-req-adjunto-remove {
+  flex-shrink: 0;
+}
+
+.user-req-item-adjunto {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.user-req-item-adjunto-link,
+.user-req-item-adjunto-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.user-req-item-adjunto-link:hover {
+  text-decoration: underline;
+}
+
+.user-req-item-adjunto-meta {
+  color: #64748b;
+}
+
+@media (max-width: 991.98px) {
+  .user-req-list {
+    max-height: none;
+  }
+}

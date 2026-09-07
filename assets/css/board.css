@@ -1,0 +1,103 @@
+.board-wrap{
+  overflow-x:auto;
+  padding-bottom: 8px;
+}
+
+.board-columns{
+  display:flex;
+  gap: 16px;
+  min-width: 900px;
+}
+
+.board-column{
+  flex: 0 0 320px;
+}
+
+.column-title{
+  background:#fff;
+  border:1px solid rgba(0,0,0,.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+}
+
+.cards-zone{
+  margin-top: 10px;
+  min-height: 600px;
+}
+
+.cards-pager-zone{
+  min-height: 42px;
+}
+
+.activity-card{
+  background:#fff;
+  border:1px solid rgba(0,0,0,.08);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.activity-title{
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.activity-desc{
+  color:#555;
+  font-size: .9rem;
+  white-space: pre-wrap;
+}
+
+.time-badge{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 700;
+}
+
+.btn-action{
+  width:100%;
+  margin-top: 6px;
+}
+
+.started-actions-row{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:8px;
+  margin-top:6px;
+}
+
+.started-actions-row .btn-action{
+  margin-top:0;
+}
+
+.pager-arrow-btn{
+  min-width: 56px;
+  border: 1px solid #0d6efd;
+  color: #0d6efd;
+  background: #fff;
+  font-weight: 700;
+}
+
+.pager-arrow-btn:hover:not(:disabled){
+  background: #eaf2ff;
+  color: #0b5ed7;
+  border-color: #0b5ed7;
+}
+
+.pager-arrow-btn:disabled{
+  border-color: #9ec5fe;
+  color: #9ec5fe;
+}
+
+@media (max-width: 768px){
+  .board-columns{
+    min-width: 780px;
+  }
+  .board-column{
+    flex-basis: 280px;
+  }
+}
+
