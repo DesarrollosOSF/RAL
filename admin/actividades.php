@@ -46,12 +46,16 @@ function actividadAvatarVariant(string $titulo): int
 
 $pdo = getDBConnection();
 ensureActividadesActivoColumn($pdo);
+ensureRalActividadColumns($pdo);
 $jornadaId = getOrCreateJornadaHoy($pdo);
 
 $msg = '';
 $error = '';
 $postTitulo = '';
 $postDesc = '';
+$postGrupoId = 0;
+$postServicioSubtipo = '';
+$gruposRal = getRalGrupos($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $csrfOk = verifyCsrfToken($_POST['csrf_token'] ?? '');
@@ -81,15 +85,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'No se pudo actualizar el estado de la actividad.';
             }
         }
+    } elseif ($accionPost === 'actualizar_grupo') {
+        $actividadIdUpd = (int)($_POST['actividad_id'] ?? 0);
+        $grupoIdUpd = (int)($_POST['grupo_id'] ?? 0);
+        $subUpd = trim((string)($_POST['servicio_subtipo'] ?? ''));
+        if ($subUpd!=='' && !in_array($subUpd, RAL_SERVICIO_SUBTIPOS, true)) $subUpd='';
+        if ($actividadIdUpd<=0) $error='Actividad inválida.';
+        else {
+            // validar grupo existe o 0 (sin grupo)
+            $grupoOk = $grupoIdUpd===0;
+            foreach($gruposRal as $g) if((int)$g['id']===$grupoIdUpd) $grupoOk=true;
+            if(!$grupoOk) $error='Grupo inválido.';
+            else {
+                $pdo->prepare("UPDATE actividades SET grupo_id=?, servicio_subtipo=? WHERE id=?")->execute([$grupoIdUpd?:null, $subUpd?:null, $actividadIdUpd]);
+                $msg='Clasificación RAL actualizada.';
+            }
+        }
     } else {
         $postTitulo = trim((string)($_POST['titulo'] ?? ''));
         $postDesc = trim((string)($_POST['descripcion'] ?? ''));
+        $postGrupoId = (int)($_POST['grupo_id'] ?? 0);
+        $postServicioSubtipo = trim((string)($_POST['servicio_subtipo'] ?? ''));
+        if ($postServicioSubtipo!=='' && !in_array($postServicioSubtipo, RAL_SERVICIO_SUBTIPOS, true)) $postServicioSubtipo='';
         $titulo = sanitizar($postTitulo);
         $descripcion = $postDesc;
 
         if ($titulo === '') {
             $error = 'El título es obligatorio.';
         } else {
+            $grupoOk = $postGrupoId===0;
+            foreach($gruposRal as $g) if((int)$g['id']===$postGrupoId) $grupoOk=true;
+            if(!$grupoOk) $error='Grupo RAL inválido.';
+            else {
             $enTransaccion = false;
             try {
                 $stmtDup = $pdo->prepare('
@@ -106,8 +133,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->beginTransaction();
                     $enTransaccion = true;
 
-                    $stmtInsAct = $pdo->prepare('INSERT INTO actividades (titulo, descripcion, activo) VALUES (?, ?, 1)');
-                    $stmtInsAct->execute([$titulo, $descripcion]);
+                    $stmtInsAct = $pdo->prepare('INSERT INTO actividades (titulo, descripcion, activo, grupo_id, servicio_subtipo) VALUES (?, ?, 1, ?, ?)');
+                    $stmtInsAct->execute([$titulo, $descripcion, $postGrupoId?:null, $postServicioSubtipo?:null]);
                     $actividadId = (int)$pdo->lastInsertId();
 
                     $stmtEstado = $pdo->prepare('SELECT id FROM actividad_estados WHERE slug = ? LIMIT 1');
@@ -138,6 +165,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $msg = 'Actividad creada y asignada a todos los usuarios activos.';
                     $postTitulo = '';
                     $postDesc = '';
+                    $postGrupoId = 0;
+                    $postServicioSubtipo = '';
                 }
             } catch (Exception $e) {
                 if ($enTransaccion && $pdo->inTransaction()) {
@@ -146,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Error al crear la actividad.';
             }
         }
-    }
+        }}
 }
 
 $qBuscar = isset($_GET['q'])
@@ -181,7 +210,7 @@ $offset = ($currentPage - 1) * $rowsPerPage;
 
 if ($patronLike !== null) {
     $stmtList = $pdo->prepare('
-        SELECT id, titulo, descripcion, activo, created_at
+        SELECT id, titulo, descripcion, activo, grupo_id, servicio_subtipo, created_at
         FROM actividades
         WHERE titulo LIKE ?
         ORDER BY activo DESC, created_at DESC
@@ -190,7 +219,7 @@ if ($patronLike !== null) {
     $stmtList->execute([$patronLike, $rowsPerPage, $offset]);
 } else {
     $stmtList = $pdo->prepare('
-        SELECT id, titulo, descripcion, activo, created_at
+        SELECT id, titulo, descripcion, activo, grupo_id, servicio_subtipo, created_at
         FROM actividades
         ORDER BY activo DESC, created_at DESC
         LIMIT ? OFFSET ?
@@ -259,6 +288,28 @@ require_once __DIR__ . '/../includes/header_admin_dashboard.php';
           </div>
         </div>
 
+        <div class="row g-2 mb-3">
+          <div class="col-12 col-md-7">
+            <label class="form-label admin-act-label" for="act-grupo">Grupo RAL <span class="text-muted fw-normal">(solo visible en reportes admin)</span></label>
+            <div class="admin-act-input-wrap">
+              <i class="bi bi-collection" aria-hidden="true"></i>
+              <select class="form-select" id="act-grupo" name="grupo_id">
+                <option value="0">— Sin clasificar —</option>
+                <?php foreach($gruposRal as $gr): ?><option value="<?php echo (int)$gr['id']; ?>" <?php echo (int)$postGrupoId===(int)$gr['id']?'selected':''; ?>><?php echo htmlspecialchars($gr['nombre'],ENT_QUOTES,'UTF-8'); ?></option><?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="col-12 col-md-5" id="wrap-serv-subtipo" style="<?php echo (int)$postGrupoId===RAL_GRUPO_SERVICIOS?'':'display:none;'; ?>">
+            <label class="form-label admin-act-label" for="act-subtipo">Subtipo servicio</label>
+            <select class="form-select" id="act-subtipo" name="servicio_subtipo">
+              <option value="">— —</option>
+              <?php foreach(RAL_SERVICIO_SUBTIPOS as $st): ?><option value="<?php echo $st; ?>" <?php echo $postServicioSubtipo===$st?'selected':''; ?>><?php echo htmlspecialchars(ucfirst(str_replace('_',' ',$st)),ENT_QUOTES,'UTF-8'); ?></option><?php endforeach; ?>
+            </select>
+            <div class="form-text small">Para "Prestación servicio" y "Pagar Destino Final": completo / inicial / final / terceros / mascotas / pago destino final.</div>
+          </div>
+        </div>
+        <script>document.getElementById('act-grupo')?.addEventListener('change',function(){var w=document.getElementById('wrap-serv-subtipo'); w.style.display=parseInt(this.value,10)===<?php echo RAL_GRUPO_SERVICIOS; ?>?'':'none';});</script>
+
         <div class="admin-act-info-box" role="status">
           <i class="bi bi-info-circle flex-shrink-0" aria-hidden="true"></i>
           <span>Después de crear la actividad, podrás iniciarla, pausarla, reanudarla y finalizarla.</span>
@@ -321,7 +372,7 @@ require_once __DIR__ . '/../includes/header_admin_dashboard.php';
                 $estaActiva = (int)($a['activo'] ?? 1) === 1;
                 $toggleActivo = $estaActiva ? 0 : 1;
               ?>
-              <li class="admin-act-list-item <?php echo $estaActiva ? '' : 'admin-act-list-item--inactive'; ?>">
+              <li class="admin-act-list-item <?php echo $estaActiva ? '' : 'admin-act-list-item--inactive'; ?>" style="flex-wrap:wrap;">
                 <div class="admin-act-avatar admin-act-avatar--<?php echo $av; ?>" aria-hidden="true"><?php echo htmlspecialchars($ini, ENT_QUOTES, 'UTF-8'); ?></div>
                 <div class="admin-act-list-item-main">
                   <div class="admin-act-list-item-title">
@@ -329,8 +380,23 @@ require_once __DIR__ . '/../includes/header_admin_dashboard.php';
                     <span class="admin-act-status-pill <?php echo $estaActiva ? 'admin-act-status-pill--on' : 'admin-act-status-pill--off'; ?>">
                       <?php echo $estaActiva ? 'Activa' : 'Inactiva'; ?>
                     </span>
+                    <?php $gid=(int)($a['grupo_id']??0); if($gid>0): $gNom=''; foreach($gruposRal as $gr) if((int)$gr['id']===$gid) $gNom=$gr['nombre']; ?>
+                      <span class="badge bg-primary-subtle text-primary border small" title="Grupo RAL"><?php echo htmlspecialchars($gNom,ENT_QUOTES,'UTF-8'); ?></span>
+                    <?php endif; ?>
+                    <?php if(!empty($a['servicio_subtipo'])): ?><span class="badge bg-info-subtle text-info border small"><?php echo htmlspecialchars(ucfirst(str_replace('_',' ',$a['servicio_subtipo'])),ENT_QUOTES,'UTF-8'); ?></span><?php endif; ?>
                   </div>
                   <div class="admin-act-list-item-meta">Creada: <?php echo htmlspecialchars($fechaTxt, ENT_QUOTES, 'UTF-8'); ?></div>
+                  <form method="POST" class="d-flex gap-1 mt-1 align-items-center" style="flex-wrap:wrap;">
+                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8'); ?>">
+                    <input type="hidden" name="accion" value="actualizar_grupo">
+                    <input type="hidden" name="actividad_id" value="<?php echo (int)$a['id']; ?>">
+                    <select name="grupo_id" class="form-select form-select-sm" style="width:auto;min-width:180px;">
+                      <option value="0">— Sin grupo —</option>
+                      <?php foreach($gruposRal as $gr): ?><option value="<?php echo (int)$gr['id']; ?>" <?php echo (int)($a['grupo_id']??0)===(int)$gr['id']?'selected':''; ?>><?php echo htmlspecialchars($gr['nombre'],ENT_QUOTES,'UTF-8'); ?></option><?php endforeach; ?>
+                    </select>
+                    
+                    <button class="btn btn-sm btn-outline-primary" type="submit" title="Guardar grupo"><i class="bi bi-check-lg"></i></button>
+                  </form>
                 </div>
                 <form method="POST" action="" class="admin-act-toggle-form">
                   <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8'); ?>">

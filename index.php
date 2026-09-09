@@ -12,6 +12,17 @@ $pdo = getDBConnection();
 $actividadesModalNotasIds = getActividadesConModalNotasIds($pdo);
 $actividadNotasOtrosId = getActividadNotasOtrosId($pdo);
 $actividadNotasFacturacionId = getActividadNotasFacturacionId($pdo);
+// Actividades del grupo "Servicios" a las que se les pide detalle completo/inicial/final + terceros/mascota
+$actividadesServicioSubtipoIds = [];
+try {
+    ensureRalActividadColumns($pdo);
+    // Solo actividades de Servicios que NO tengan ya un subtipo fijo (ej. "Pagar Destino Final" sí lo tiene)
+    $stmtServ = $pdo->prepare("SELECT id FROM actividades WHERE grupo_id = ? AND (servicio_subtipo IS NULL OR servicio_subtipo = '')");
+    $stmtServ->execute([RAL_GRUPO_SERVICIOS]);
+    $actividadesServicioSubtipoIds = array_map('intval', $stmtServ->fetchAll(PDO::FETCH_COLUMN));
+} catch (Throwable $e) {
+    $actividadesServicioSubtipoIds = [(int)ACTIVIDAD_NOTAS_FUNERARIO_ID];
+}
 $title = 'Actividades - Control Sedes';
 $userNavCurrent = 'actividades';
 require_once __DIR__ . '/includes/header_user_app.php';
@@ -123,6 +134,30 @@ require_once __DIR__ . '/includes/header_user_app.php';
             <input type="text" class="notas-actividad-input notas-actividad-input--muted" id="actividadNotasFecha" readonly tabindex="-1" aria-readonly="true">
           </div>
         </div>
+        <div class="row g-3 notas-actividad-fields-row" id="actividadNotasServicioWrap" style="display:none;">
+          <div class="col-sm-6">
+            <label class="notas-actividad-label" for="actividadNotasServicioTipo">Tipo de servicio</label>
+            <select class="notas-actividad-input" id="actividadNotasServicioTipo" aria-label="Tipo de servicio">
+              <option value="">— seleccionar —</option>
+              <option value="empresarial">Empresarial</option>
+              <option value="particular">Particular</option>
+              <option value="osf">OSF</option>
+              <option value="terceros">Terceros</option>
+              <option value="mascotas">Mascotas</option>
+              <option value="servicios_no_prestados">Servicios no prestados</option>
+            </select>
+          </div>
+          <div class="col-sm-6" id="actividadNotasServicioSubtipoWrap" style="display:none;">
+            <label class="notas-actividad-label" for="actividadNotasServicioSubtipo">Subtipo de servicio</label>
+            <select class="notas-actividad-input" id="actividadNotasServicioSubtipo" aria-label="Subtipo de servicio" disabled>
+              <option value="">— seleccionar —</option>
+            </select>
+          </div>
+
+          <!-- Campos ocultos de compatibilidad con el API/board.js actual. -->
+          <input type="checkbox" id="actividadNotasEsTerceros" class="d-none" tabindex="-1" aria-hidden="true">
+          <input type="checkbox" id="actividadNotasEsMascota" class="d-none" tabindex="-1" aria-hidden="true">
+        </div>
         <div class="notas-actividad-obs-wrap">
           <label class="notas-actividad-label" for="actividadNotasObservaciones">Observaciones</label>
           <textarea class="notas-actividad-textarea" id="actividadNotasObservaciones" rows="5" maxlength="2000" placeholder="Escriba aquí las novedades, pendientes o actividades realizadas..."></textarea>
@@ -199,6 +234,107 @@ require_once __DIR__ . '/includes/header_user_app.php';
   window.__ACTIVIDAD_NOTAS_FUNERARIO_ID__ = <?php echo (int)ACTIVIDAD_NOTAS_FUNERARIO_ID; ?>;
   window.__ACTIVIDAD_NOTAS_OTROS_ID__ = <?php echo (int)$actividadNotasOtrosId; ?>;
   window.__ACTIVIDAD_NOTAS_FACTURACION_ID__ = <?php echo (int)$actividadNotasFacturacionId; ?>;
+  window.__ACTIVIDAD_SERVICIO_SUBTIPO_IDS__ = <?php echo json_encode($actividadesServicioSubtipoIds, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+  /*
+   * El board.js existente ya envía servicio_tipo, pero todavía no envía
+   * servicio_subtipo. Este pequeño adaptador permite que el formulario nuevo
+   * de este index.php también mande el subtipo al API sin tener que modificar
+   * el resto del tablero.
+   */
+  (function () {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      try {
+        const url = typeof input === 'string'
+          ? input
+          : (input && input.url ? input.url : '');
+
+        if (String(url).includes('api/actividad_notas.php') && init && init.body instanceof FormData) {
+          const subtipo = document.getElementById('actividadNotasServicioSubtipo');
+          const tipo = document.getElementById('actividadNotasServicioTipo');
+
+          if (subtipo) {
+            init.body.set('servicio_subtipo', subtipo.value || '');
+          }
+
+          /* Mantiene las banderas antiguas sincronizadas con el nuevo tipo. */
+          if (tipo) {
+            init.body.set('es_terceros', tipo.value === 'terceros' ? '1' : '');
+            init.body.set('es_mascota', tipo.value === 'mascotas' ? '1' : '');
+          }
+        }
+      } catch (e) {
+        console.warn('No se pudo preparar servicio_subtipo:', e);
+      }
+
+      return originalFetch(input, init);
+    };
+  })();
+</script>
+
+<script>
+  (function () {
+    const tipo = document.getElementById('actividadNotasServicioTipo');
+    const subtipoWrap = document.getElementById('actividadNotasServicioSubtipoWrap');
+    const subtipo = document.getElementById('actividadNotasServicioSubtipo');
+    const terceros = document.getElementById('actividadNotasEsTerceros');
+    const mascotas = document.getElementById('actividadNotasEsMascota');
+
+    if (!tipo || !subtipoWrap || !subtipo) return;
+
+    function actualizarSubtipos() {
+      const valor = String(tipo.value || '');
+      let opciones = [];
+
+      if (['empresarial', 'particular', 'osf', 'terceros'].includes(valor)) {
+        opciones = [
+          ['completo', 'Completo'],
+          ['inicial', 'Inicial'],
+          ['final', 'Final']
+        ];
+      } else if (valor === 'mascotas') {
+        opciones = [
+          ['prevision', 'Previsión'],
+          ['particular', 'Particular']
+        ];
+      } else if (valor === 'servicios_no_prestados') {
+        opciones = [
+          ['negados', 'Negados'],
+          ['no_prestados', 'No prestados']
+        ];
+      }
+
+      subtipo.innerHTML = '<option value="">— seleccionar —</option>';
+      opciones.forEach(function (item) {
+        const option = document.createElement('option');
+        option.value = item[0];
+        option.textContent = item[1];
+        subtipo.appendChild(option);
+      });
+
+      subtipo.disabled = opciones.length === 0;
+      subtipoWrap.style.display = opciones.length ? '' : 'none';
+
+      if (terceros) terceros.checked = valor === 'terceros';
+      if (mascotas) mascotas.checked = valor === 'mascotas';
+    }
+
+    tipo.addEventListener('change', actualizarSubtipos);
+
+    const modal = document.getElementById('actividadNotasModal');
+    if (modal) {
+      modal.addEventListener('hidden.bs.modal', function () {
+        tipo.value = '';
+        subtipo.innerHTML = '<option value="">— seleccionar —</option>';
+        subtipo.value = '';
+        subtipo.disabled = true;
+        subtipoWrap.style.display = 'none';
+        if (terceros) terceros.checked = false;
+        if (mascotas) mascotas.checked = false;
+      });
+    }
+  })();
 </script>
 <script src="<?php echo ASSETS_URL; ?>js/board.js"></script>
 

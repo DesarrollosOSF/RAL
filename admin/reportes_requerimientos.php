@@ -236,26 +236,47 @@ try {
     $errorCarga = $e->getMessage();
 }
 
-if (isset($_GET['export']) && $_GET['export'] === 'csv' && $tablaExiste && $errorCarga === '') {
-    header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="reporte_requerimientos_' . $fechaDesde . '_' . $fechaHasta . '.csv"');
+if (isset($_GET['export']) && $_GET['export'] === 'excel' && $tablaExiste && $errorCarga === '') {
+    header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="reporte_requerimientos_' . $fechaDesde . '_' . $fechaHasta . '.xls"');
+    header('Cache-Control: max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
     echo "\xEF\xBB\xBF";
-    $out = fopen('php://output', 'w');
-    fputcsv($out, ['Fecha', 'Asunto', 'Usuario', 'Sede', 'Dependencia', 'Prioridad', 'Estado', 'Descripción', 'Adjunto']);
-    foreach ($rows as $r) {
-        fputcsv($out, [
-            formatFechaHoraReqAdmin($r['creado_at']),
-            $r['asunto'],
-            $r['usuario_nombre'],
-            $r['sede_nombre'],
-            $r['dependencia_nombre'],
-            labelPrioridadReq($r['prioridad']),
-            labelEstadoReq($r['estado']),
-            $r['descripcion'],
-            $r['adjunto'] ?? '',
-        ]);
-    }
-    fclose($out);
+    ?>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <table border="1">
+        <thead>
+            <tr style="background-color: #0d6efd; color: #ffffff; font-weight: bold;">
+                <th>Fecha</th>
+                <th>Asunto</th>
+                <th>Usuario</th>
+                <th>Sede</th>
+                <th>Dependencia</th>
+                <th>Prioridad</th>
+                <th>Estado</th>
+                <th>Descripción</th>
+                <th>Adjunto</th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($rows as $r): ?>
+            <tr>
+                <td><?php echo htmlspecialchars(formatFechaHoraReqAdmin($r['creado_at']), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars($r['asunto'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars($r['usuario_nombre'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars($r['sede_nombre'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars($r['dependencia_nombre'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars(labelPrioridadReq($r['prioridad']), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars(labelEstadoReq($r['estado']), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars($r['descripcion'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars($r['adjunto'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php
     exit;
 }
 
@@ -288,8 +309,8 @@ $clearUrl = htmlspecialchars(
     'UTF-8'
 );
 
-$csvUrl = htmlspecialchars(
-    BASE_URL . 'admin/reportes_requerimientos.php?' . http_build_query(array_merge($baseQueryParams, ['export' => 'csv'])),
+$excelUrl = htmlspecialchars(
+    BASE_URL . 'admin/reportes_requerimientos.php?' . http_build_query(array_merge($baseQueryParams, ['export' => 'excel'])),
     ENT_QUOTES,
     'UTF-8'
 );
@@ -407,7 +428,7 @@ require_once __DIR__ . '/../includes/header_admin_dashboard.php';
           <button class="btn btn-primary px-4" type="submit"><i class="bi bi-search me-2"></i>Consultar</button>
           <a class="btn btn-outline-secondary px-4" href="<?php echo $clearUrl; ?>"><i class="bi bi-arrow-counterclockwise me-2"></i>Limpiar</a>
           <?php if ($tablaExiste && $errorCarga === '' && $kpiTotal > 0): ?>
-            <a class="btn btn-outline-primary px-4 ms-sm-auto" href="<?php echo $csvUrl; ?>"><i class="bi bi-filetype-csv me-2"></i>Exportar CSV</a>
+            <a class="btn btn-outline-success px-4 ms-sm-auto" href="<?php echo $excelUrl; ?>"><i class="bi bi-file-earmark-excel me-2"></i>Exportar Excel (.xls)</a>
           <?php endif; ?>
         </div>
       </div>
