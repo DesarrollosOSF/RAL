@@ -62,6 +62,16 @@ define('ACTIVIDAD_NOTAS_FACTURACION_ID', 0);
 /** Slug del rol en BD (coincide con `usuarios.rol`: auxiliar_administrativo). */
 define('ROL_AUXILIAR_ADMINISTRATIVO', 'auxiliar_administrativo');
 
+/** Grupos RAL (reporte) — ids fijos creados por migrate_ral_ajustes.sql */
+define('RAL_GRUPO_ADMIN_COMERCIAL', 1);
+define('RAL_GRUPO_ADMIN_CARTERA', 2);
+define('RAL_GRUPO_SERVICIOS', 3);
+define('RAL_GRUPO_FACTURACION', 4);
+define('RAL_GRUPO_OTRAS_ADMIN', 5);
+define('RAL_GRUPO_NO_CLASIFICADAS', 6);
+/** Subtipos válidos para grupo Servicios (columna actividades.servicio_subtipo / actividad_notas.servicio_tipo) */
+define('RAL_SERVICIO_SUBTIPOS', ['completo','inicial','final','terceros','mascotas','pago_destino_final']);
+
 function getActividadNotasOtrosId(?PDO $pdo = null): int
 {
     $otrosId = (int)ACTIVIDAD_NOTAS_OTROS_ID;
@@ -421,3 +431,110 @@ function getOrCreateJornadaHoy(PDO $pdo): int {
     return $jornadaId;
 }
 
+// ============================================
+// RAL — helpers grupos / días hábiles / ausencias
+// ============================================
+function ensureRalActividadColumns(PDO $pdo): void {
+    static $done=false; if($done) return;
+    try {
+        $c=$pdo->query("SHOW COLUMNS FROM actividades LIKE 'grupo_id'")->fetch();
+        if(!$c) {
+            $pdo->exec("ALTER TABLE actividades ADD COLUMN grupo_id INT NULL AFTER activo, ADD KEY idx_actividades_grupo (grupo_id)");
+            try { $pdo->exec("ALTER TABLE actividades ADD CONSTRAINT fk_actividades_grupo FOREIGN KEY (grupo_id) REFERENCES actividad_grupos(id) ON DELETE SET NULL ON UPDATE CASCADE"); } catch(Throwable $e) {}
+        }
+        $c2=$pdo->query("SHOW COLUMNS FROM actividades LIKE 'servicio_subtipo'")->fetch();
+        if(!$c2) $pdo->exec("ALTER TABLE actividades ADD COLUMN servicio_subtipo VARCHAR(30) NULL AFTER grupo_id");
+        $done=true;
+    } catch(Throwable $e) { $done=true; }
+}
+/**
+ * Garantiza las columnas de subtipo de servicio en `actividad_notas`
+ * (completo/inicial/final + terceros/mascota, por cada ocurrencia registrada).
+ */
+function ensureActividadNotasServicioColumns(PDO $pdo): void {
+    static $done = false;
+    if ($done) return;
+    try {
+        $c = $pdo->query("SHOW COLUMNS FROM actividad_notas LIKE 'servicio_tipo'")->fetch();
+        if (!$c) {
+            $pdo->exec("ALTER TABLE actividad_notas
+                ADD COLUMN servicio_tipo VARCHAR(30) NULL AFTER observaciones,
+                ADD COLUMN es_terceros TINYINT(1) NOT NULL DEFAULT 0,
+                ADD COLUMN es_mascota TINYINT(1) NOT NULL DEFAULT 0");
+        }
+        $done = true;
+    } catch (Throwable $e) { $done = true; }
+}
+/** Subtipos válidos para el selector de servicio dentro de la nota (grupo Servicios). */
+define('RAL_SERVICIO_NOTA_TIPOS', ['completo', 'inicial', 'final']);
+
+function getRalGrupos(PDO $pdo): array {
+    try {
+        ensureRalActividadColumns($pdo);
+        return $pdo->query("SELECT id,slug,nombre,orden FROM actividad_grupos ORDER BY orden ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
+    } catch(Throwable $e) { return []; }
+}
+function getRalGrupoNombre(int $grupoId, array $grupos=null): string {
+    if($grupos!==null) foreach($grupos as $g) if((int)$g['id']===$grupoId) return (string)$g['nombre'];
+    return 'Grupo '.$grupoId;
+}
+function fetchRalDiasHabilesMes(PDO $pdo, int $anio, int $mes): ?int {
+    try {
+        $stmt=$pdo->prepare("SELECT dias_habiles FROM ral_dias_habiles WHERE anio=? AND mes=? LIMIT 1");
+        $stmt->execute([$anio,$mes]); $v=$stmt->fetchColumn();
+        return $v===false?null:(int)$v;
+    } catch(Throwable $e) { return null; }
+}
+/**
+ * @return array<int,float> usuario_id => total_dias ausentes en rango
+ */
+function fetchRalAusenciasPorUsuario(PDO $pdo, string $fechaDesde, string $fechaHasta, ?array $usuarioIds=null): array {
+    try {
+        $sql="SELECT usuario_id, COALESCE(SUM(dias),0) as total FROM ral_ausencias WHERE fecha BETWEEN ? AND ? ";
+        $params=[$fechaDesde,$fechaHasta];
+        if($usuarioIds!==null && $usuarioIds!==[]) {
+            $ids=array_values(array_filter(array_map('intval',$usuarioIds),fn($id)=>$id>0));
+            if($ids===[]) return [];
+            $ph=implode(',',array_fill(0,count($ids),'?'));
+            $sql.=" AND usuario_id IN ($ph) ";
+            $params=array_merge($params,$ids);
+        }
+        $sql.=" GROUP BY usuario_id";
+        $stmt=$pdo->prepare($sql); $stmt->execute($params);
+        $out=[]; foreach($stmt->fetchAll() as $r) $out[(int)$r['usuario_id']]=(float)$r['total'];
+        return $out;
+    } catch(Throwable $e) { return []; }
+}
+function fetchRalAusenciasDetalle(PDO $pdo, string $fechaDesde, string $fechaHasta, ?int $usuarioId=null): array {
+    try {
+        $sql="SELECT usuario_id,tipo,fecha,dias FROM ral_ausencias WHERE fecha BETWEEN ? AND ? ";
+        $params=[$fechaDesde,$fechaHasta];
+        if($usuarioId!==null){ $sql.=" AND usuario_id=? "; $params[]=$usuarioId; }
+        $stmt=$pdo->prepare($sql); $stmt->execute($params);
+        return $stmt->fetchAll();
+    } catch(Throwable $e) { return []; }
+}
+/**
+ * Días hábiles efectivos por usuario en rango (puede cruzar meses).
+ * dias_efectivos = sum(dias_habiles de cada mes en rango) - ausencias_usuario
+ * Si no hay config para un mes, ese mes aporta 0 (y se muestra alerta en reporte).
+ */
+function calcularDiasEfectivosRal(PDO $pdo, string $fechaDesde, string $fechaHasta, int $usuarioId, ?int $diasHabilesOverride=null): array {
+    // dias por mes
+    $ini=new DateTime($fechaDesde); $fin=new DateTime($fechaHasta);
+    $ini->modify('first day of this month'); $fin->modify('first day of next month');
+    $totalHabiles=0; $mesesSinConfig=[];
+    $period=new DatePeriod($ini,new DateInterval('P1M'),$fin);
+    foreach($period as $dt){
+        $a=(int)$dt->format('Y'); $m=(int)$dt->format('n');
+        $dh=$diasHabilesOverride ?? fetchRalDiasHabilesMes($pdo,$a,$m);
+        if($dh===null){ $mesesSinConfig[]=sprintf('%04d-%02d',$a,$m); }
+        else $totalHabiles+=(int)$dh;
+    }
+    // Si el rango no es mes completo, aproximar proporcional? Por simplicidad RAL usa mes completo si rango cubre mes completo, si no, prorratea por días del mes?
+    // Para reporte RAL mensual/por rango: si rango != mes calendario, usar totalHabiles como suma de meses tocados (admin debe configurar mes completo).
+    $ausMap=fetchRalAusenciasPorUsuario($pdo,$fechaDesde,$fechaHasta,[$usuarioId]);
+    $aus=(float)($ausMap[$usuarioId]??0);
+    $efectivo=max(0,$totalHabiles - $aus);
+    return ['habiles'=>$totalHabiles,'ausencias'=>$aus,'efectivos'=>$efectivo,'mesesSinConfig'=>$mesesSinConfig];
+}

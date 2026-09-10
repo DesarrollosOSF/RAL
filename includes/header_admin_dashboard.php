@@ -1,11 +1,14 @@
 <?php
 /**
  * Shell layout admin (sidebar + topbar). Cierra con footer_admin_dashboard.php.
- * Variables esperadas: $title (string), $adminNavCurrent (string): dashboard|actividades|reportes|reportes_notas|reportes_requerimientos|usuarios
+ * Variables esperadas: $title (string), $adminNavCurrent (string): dashboard|actividades|reportes|ral_config|reportes_notas|reportes_requerimientos|usuarios
  */
 $title = $title ?? 'Admin - Dashboard';
 $adminNavCurrent = $adminNavCurrent ?? 'dashboard';
 $adminSidebarFootInclude = $adminSidebarFootInclude ?? null;
+$sedeIdFiltro = (int)($sedeIdFiltro ?? 0);
+$qUsuario = (string)($qUsuario ?? '');
+
 $nombreAdmin = (string)($_SESSION['nombre_completo'] ?? 'Administrador');
 $adminTopbarGreetNombre = $nombreAdmin;
 if (preg_match('/^\s*(\S+)/u', $nombreAdmin, $gm)) {
@@ -39,6 +42,9 @@ if (preg_match('/^\s*(\S+)/u', $nombreAdmin, $gm)) {
             </a>
             <a class="admin-sidebar-link <?php echo $adminNavCurrent === 'reportes' ? 'active' : ''; ?>" href="<?php echo htmlspecialchars(BASE_URL . 'admin/reportes_tiempo_actividad.php', ENT_QUOTES, 'UTF-8'); ?>">
                 <i class="bi bi-bar-chart-line"></i> Reportes de tiempo
+            </a>
+            <a class="admin-sidebar-link <?php echo $adminNavCurrent === 'ral_config' ? 'active' : ''; ?>" href="<?php echo htmlspecialchars(BASE_URL . 'admin/ral_config.php', ENT_QUOTES, 'UTF-8'); ?>">
+                <i class="bi bi-calendar3"></i> Configuración RAL
             </a>
             <a class="admin-sidebar-link <?php echo $adminNavCurrent === 'usuarios' ? 'active' : ''; ?>" href="<?php echo htmlspecialchars(BASE_URL . 'admin/usuarios.php', ENT_QUOTES, 'UTF-8'); ?>">
                 <i class="bi bi-people"></i> Usuarios

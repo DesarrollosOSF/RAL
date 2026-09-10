@@ -15,7 +15,7 @@ const NOTAS_ACTIVITY_IDS = (() => {
   return [10];
 })();
 
-function actividadTieneModalNotas(actividadId){
+function actividadTieneModalNotas(actividadId) {
   return NOTAS_ACTIVITY_IDS.includes(Number(actividadId) || 0);
 }
 
@@ -35,7 +35,7 @@ const NOTAS_FACTURACION_ID = (() => {
 })();
 
 /** Etiqueta y placeholder del primer campo según actividad. */
-function getNotasCampoPrincipalEtiquetas(actividadId){
+function getNotasCampoPrincipalEtiquetas(actividadId) {
   const id = Number(actividadId) || 0;
   if (NOTAS_OTROS_ID > 0 && id === NOTAS_OTROS_ID) {
     return { label: 'Nombre actividad', placeholder: 'Nombre actividad' };
@@ -46,7 +46,7 @@ function getNotasCampoPrincipalEtiquetas(actividadId){
   return { label: 'Fallecido', placeholder: 'Nombre del fallecido' };
 }
 
-function applyNotasCampoPrincipalLabels(actividadId){
+function applyNotasCampoPrincipalLabels(actividadId) {
   const lbl = document.getElementById('actividadNotasCampoLabel');
   const inp = document.getElementById('actividadNotasFallecido');
   const { label, placeholder } = getNotasCampoPrincipalEtiquetas(actividadId);
@@ -81,7 +81,7 @@ let activeMobileColumn = 'asignadas';
 let boardSortOrder = 'nombre';
 let notasContext = { actividadId: 0, titulo: '' };
 
-function escapeHtml(text){
+function escapeHtml(text) {
   return String(text ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -89,29 +89,33 @@ function escapeHtml(text){
     .replace(/"/g, '&quot;');
 }
 
-function titleInitials(titulo){
+function titleInitials(titulo) {
   const parts = String(titulo || '').trim().split(/\s+/).filter(Boolean);
-  if(parts.length === 0) return '?';
-  if(parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
 }
 
-function formatNotaFechaDisplay(value){
-  if(!value) return '';
+function formatNotaFechaDisplay(value) {
+  if (!value) return '';
   const normalized = String(value).trim().replace(' ', 'T');
   const d = value instanceof Date ? value : new Date(normalized);
-  if(Number.isNaN(d.getTime())) return '';
+  if (Number.isNaN(d.getTime())) return '';
   const pad = n => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-async function saveNotaActividad(payload){
+async function saveNotaActividad(payload) {
   const fd = new FormData();
   fd.append('csrf_token', getCsrfToken());
   fd.append('actividad_id', String(payload.actividadId));
   fd.append('fallecido', String(payload.fallecido ?? ''));
   fd.append('fecha', String(payload.fecha ?? ''));
   fd.append('observaciones', String(payload.observaciones ?? ''));
+  fd.append('servicio_tipo', String(payload.servicioTipo ?? ''));
+  fd.append('servicio_subtipo', String(payload.servicioSubtipo ?? ''));
+  fd.append('es_terceros', payload.esTerceros ? '1' : '');
+  fd.append('es_mascota', payload.esMascota ? '1' : '');
 
   const res = await fetch(API_NOTAS, {
     method: 'POST',
@@ -119,39 +123,39 @@ async function saveNotaActividad(payload){
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({ ok: false, message: 'Respuesta inválida del servidor' }));
-  if(!data.ok){
+  if (!data.ok) {
     throw new Error(data.message || 'Error al guardar la nota');
   }
   return data.nota || null;
 }
 
-function sortCardList(list){
-  if(boardSortOrder !== 'nombre') return list;
+function sortCardList(list) {
+  if (boardSortOrder !== 'nombre') return list;
   return [...list].sort((a, b) => String(a.titulo || '').localeCompare(String(b.titulo || ''), 'es', { sensitivity: 'base' }));
 }
 
-function msToHMSFromSeconds(totalSeg){
+function msToHMSFromSeconds(totalSeg) {
   totalSeg = Math.max(0, Math.floor(Number(totalSeg) || 0));
   const h = Math.floor(totalSeg / 3600);
   const m = Math.floor((totalSeg % 3600) / 60);
   const s = totalSeg % 60;
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
 }
 
-function getCsrfToken(){
+function getCsrfToken() {
   return window.__CSRF_TOKEN__ || '';
 }
 
-function setLoadingState(button, isLoading){
-  if(!button) return;
+function setLoadingState(button, isLoading) {
+  if (!button) return;
   button.disabled = isLoading;
-  if(isLoading){
+  if (isLoading) {
     const original = button.dataset.originalText;
-    if(!original){
+    if (!original) {
       button.dataset.originalText = button.textContent;
     }
     button.textContent = 'Procesando...';
-  }else{
+  } else {
     const original = button.dataset.originalText;
     button.textContent = original || button.textContent;
     button.dataset.originalText = '';
@@ -166,15 +170,15 @@ const columnPage = {
   finalizadas: 1,
 };
 
-function ensureTimerLoop(){
-  if(timerIntervalId !== null) return;
+function ensureTimerLoop() {
+  if (timerIntervalId !== null) return;
   timerIntervalId = setInterval(tickRunningTimers, 1000);
 }
 
-function renderColumn(columnEl, pagerEl, cards, columnKey){
+function renderColumn(columnEl, pagerEl, cards, columnKey) {
   columnEl.innerHTML = '';
-  if(pagerEl) pagerEl.innerHTML = '';
-  if(!Array.isArray(cards) || cards.length === 0){
+  if (pagerEl) pagerEl.innerHTML = '';
+  if (!Array.isArray(cards) || cards.length === 0) {
     columnPage[columnKey] = 1;
     columnEl.innerHTML = '<div class="text-muted small py-2">Sin actividades</div>';
     return;
@@ -190,7 +194,7 @@ function renderColumn(columnEl, pagerEl, cards, columnKey){
   const endIdx = startIdx + ACTIVIDADES_POR_PAGINA;
   const visibleCards = filteredCards.slice(startIdx, endIdx);
 
-  for(const card of visibleCards){
+  for (const card of visibleCards) {
     const isRunning = Boolean(card.esta_corriendo);
     const actividadId = card.actividad_id;
     const cardEl = document.createElement('div');
@@ -200,8 +204,8 @@ function renderColumn(columnEl, pagerEl, cards, columnKey){
     cardEl.dataset.running = isRunning ? '1' : '0';
 
     const estadoLabel = (() => {
-      if(card.estado_slug === 'asignadas') return 'Asignada';
-      if(card.estado_slug === 'finalizadas') return 'Finalizada';
+      if (card.estado_slug === 'asignadas') return 'Asignada';
+      if (card.estado_slug === 'finalizadas') return 'Finalizada';
       // iniciadas
       return isRunning ? 'Iniciada (corriendo)' : 'Iniciada (pausada)';
     })();
@@ -236,7 +240,7 @@ function renderColumn(columnEl, pagerEl, cards, columnKey){
 
     // Robustez: `inicio_unix_ms` puede venir como string/null dependiendo de encoding BD/PHP.
     const inicioUnixMs = isRunning ? Number(card.inicio_unix_ms) : NaN;
-    if(isRunning && Number.isFinite(inicioUnixMs)){
+    if (isRunning && Number.isFinite(inicioUnixMs)) {
       runningCards.push({
         cardEl,
         inicioUnixMs,
@@ -247,7 +251,7 @@ function renderColumn(columnEl, pagerEl, cards, columnKey){
     }
   }
 
-  if(totalPages > 1){
+  if (totalPages > 1) {
     const pager = document.createElement('div');
     pager.className = 'd-flex justify-content-between align-items-center mt-2';
     pager.innerHTML = `
@@ -259,7 +263,7 @@ function renderColumn(columnEl, pagerEl, cards, columnKey){
         &gt;&gt;
       </button>
     `;
-    if(pagerEl){
+    if (pagerEl) {
       pagerEl.appendChild(pager);
     } else {
       columnEl.appendChild(pager);
@@ -267,8 +271,8 @@ function renderColumn(columnEl, pagerEl, cards, columnKey){
   }
 }
 
-function applySearchFilter(list){
-  if(!searchQuery) return list;
+function applySearchFilter(list) {
+  if (!searchQuery) return list;
   const q = searchQuery.toLowerCase();
   return list.filter(card => {
     const t = (card.titulo || '').toLowerCase();
@@ -277,11 +281,11 @@ function applySearchFilter(list){
   });
 }
 
-function renderActions(card){
+function renderActions(card) {
   const actividadId = card.actividad_id;
   const isRunning = Boolean(card.esta_corriendo);
 
-  if(card.estado_slug === 'asignadas'){
+  if (card.estado_slug === 'asignadas') {
     return `
       <button class="btn btn-primary btn-action" data-action="start" data-actividad-id="${actividadId}">
         <i class="bi bi-play-fill me-1"></i>Iniciar
@@ -289,7 +293,7 @@ function renderActions(card){
     `;
   }
 
-  if(card.estado_slug === 'finalizadas'){
+  if (card.estado_slug === 'finalizadas') {
     return `
       <button class="btn btn-secondary btn-action" disabled>
         <i class="bi bi-check2-circle me-1"></i>Completada
@@ -316,40 +320,40 @@ function renderActions(card){
   `;
 }
 
-function sumAllCardsBaseSeg(board){
+function sumAllCardsBaseSeg(board) {
   let s = 0;
-  for(const key of ['asignadas', 'iniciadas', 'finalizadas']){
-    for(const card of (board[key] || [])){
-      if(Number(card.actividad_id) === ALMUERZO_ACTIVITY_ID) continue;
+  for (const key of ['asignadas', 'iniciadas', 'finalizadas']) {
+    for (const card of (board[key] || [])) {
+      if (Number(card.actividad_id) === ALMUERZO_ACTIVITY_ID) continue;
       s += Number(card.tiempo_acumulado_seg) || 0;
     }
   }
   return s;
 }
 
-function getTotalJornadaSegundos(){
+function getTotalJornadaSegundos() {
   let extra = 0;
-  for(const r of runningCards){
-    if(Number(r.actividadId) === ALMUERZO_ACTIVITY_ID) continue;
-    if(!Number.isFinite(r.inicioUnixMs)) continue;
+  for (const r of runningCards) {
+    if (Number(r.actividadId) === ALMUERZO_ACTIVITY_ID) continue;
+    if (!Number.isFinite(r.inicioUnixMs)) continue;
     extra += Math.floor((Date.now() - r.inicioUnixMs) / 1000);
   }
   return jornadaBaseSeg + Math.max(0, extra);
 }
 
 /** Contador diario mostrado en sidebar (sin almuerzo, tope 8 h). */
-function getContadorDiarioSegundos(){
+function getContadorDiarioSegundos() {
   return Math.min(getTotalJornadaSegundos(), TOPE_HORAS_DIARIAS_CONTADOR_SEG);
 }
 
-function updateJornadaProgress(){
+function updateJornadaProgress() {
   const wrap = document.getElementById('jornada-progress-wrap');
-  if(!wrap) return;
+  if (!wrap) return;
 
   const bar = document.getElementById('jornada-progress-bar');
   const label = document.getElementById('jornada-progress-label');
   const root = document.getElementById('jornada-progress-root');
-  if(!bar || !label) return;
+  if (!bar || !label) return;
 
   const totalSeg = getTotalJornadaSegundos();
   const pctRaw = META_JORNADA_SEG > 0 ? (totalSeg / META_JORNADA_SEG) * 100 : 0;
@@ -358,7 +362,7 @@ function updateJornadaProgress(){
 
   bar.style.width = String(pctBar) + '%';
   bar.classList.remove('bg-primary', 'bg-success');
-  if(pctRaw >= 100){
+  if (pctRaw >= 100) {
     bar.classList.add('bg-success');
     bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
   } else {
@@ -367,17 +371,17 @@ function updateJornadaProgress(){
   }
 
   label.textContent = `${pctText} % — ${msToHMSFromSeconds(totalSeg)} / ${msToHMSFromSeconds(META_JORNADA_SEG)}`;
-  if(root){
+  if (root) {
     root.setAttribute('aria-valuenow', String(Math.round(pctBar)));
   }
 }
 
-function updateUserSidebarJornada(){
+function updateUserSidebarJornada() {
   const timeEl = document.getElementById('user-jornada-time');
   const bar = document.getElementById('user-jornada-bar');
   const pctLabel = document.getElementById('user-jornada-pct-label');
   const root = document.getElementById('user-jornada-progress-root');
-  if(!timeEl || !bar || !pctLabel) return;
+  if (!timeEl || !bar || !pctLabel) return;
 
   const totalSeg = getContadorDiarioSegundos();
   timeEl.textContent = msToHMSFromSeconds(totalSeg);
@@ -387,40 +391,40 @@ function updateUserSidebarJornada(){
 
   bar.style.width = String(pctBar) + '%';
   bar.classList.remove('bg-primary', 'bg-success');
-  if(pctRaw >= 100){
+  if (pctRaw >= 100) {
     bar.classList.add('bg-success');
   } else {
     bar.classList.add('bg-primary');
   }
 
   pctLabel.textContent = `${pctText}% completado`;
-  if(root){
+  if (root) {
     root.setAttribute('aria-valuenow', String(Math.round(pctBar)));
   }
 }
 
 /** Totales en pastillas: mismas longitudes que los arrays usados en renderColumn. */
-function updatePillCountLabels(nAsignadas, nIniciadas, nFinalizadas){
+function updatePillCountLabels(nAsignadas, nIniciadas, nFinalizadas) {
   const root = document.querySelector('.user-status-pills');
-  if(!root) return;
+  if (!root) return;
   const pairs = [
     ['asignadas', nAsignadas],
     ['iniciadas', nIniciadas],
     ['finalizadas', nFinalizadas],
   ];
-  for(const [key, n] of pairs){
+  for (const [key, n] of pairs) {
     const el = root.querySelector(`[data-pill-count="${key}"]`);
-    if(el) el.textContent = String(n);
+    if (el) el.textContent = String(n);
   }
 }
 
-function adjustActiveMobileColumn(board){
+function adjustActiveMobileColumn(board) {
   const keys = ['asignadas', 'iniciadas', 'finalizadas'];
-  if(!keys.includes(activeMobileColumn)) activeMobileColumn = 'asignadas';
+  if (!keys.includes(activeMobileColumn)) activeMobileColumn = 'asignadas';
   const curLen = (board[activeMobileColumn] || []).length;
-  if(curLen === 0){
+  if (curLen === 0) {
     const next = keys.find(k => (board[k] || []).length > 0);
-    if(next) activeMobileColumn = next;
+    if (next) activeMobileColumn = next;
   }
   document.querySelectorAll('.user-status-pill').forEach(p => {
     const col = p.dataset.column;
@@ -430,13 +434,13 @@ function adjustActiveMobileColumn(board){
   });
 }
 
-function syncColumnVisibility(){
+function syncColumnVisibility() {
   const wrap = document.querySelector('.user-board-wrap');
-  if(!wrap) return;
+  if (!wrap) return;
   const isDesktop = window.matchMedia('(min-width: 992px)').matches;
   wrap.querySelectorAll('.board-column').forEach(col => {
     const key = col.dataset.columnKey;
-    if(isDesktop){
+    if (isDesktop) {
       col.classList.add('user-col-visible');
     } else {
       col.classList.toggle('user-col-visible', key === activeMobileColumn);
@@ -444,21 +448,21 @@ function syncColumnVisibility(){
   });
 }
 
-function tickRunningTimers(){
-  for(const r of runningCards){
-    if(!Number.isFinite(r.inicioUnixMs)) continue;
+function tickRunningTimers() {
+  for (const r of runningCards) {
+    if (!Number.isFinite(r.inicioUnixMs)) continue;
     const elapsedSeg = Math.floor((Date.now() - r.inicioUnixMs) / 1000);
     const totalSeg = r.baseSeg + Math.max(0, elapsedSeg);
-    if(r.timeEl) r.timeEl.textContent = msToHMSFromSeconds(totalSeg);
+    if (r.timeEl) r.timeEl.textContent = msToHMSFromSeconds(totalSeg);
   }
   updateJornadaProgress();
   updateUserSidebarJornada();
 }
 
-async function refreshBoard(){
-  const res = await fetch(API_BOARD, { method:'GET', credentials:'same-origin' });
-  const data = await res.json().catch(() => ({ ok:false, message:'Respuesta inválida del servidor' }));
-  if(!data.ok){
+async function refreshBoard() {
+  const res = await fetch(API_BOARD, { method: 'GET', credentials: 'same-origin' });
+  const data = await res.json().catch(() => ({ ok: false, message: 'Respuesta inválida del servidor' }));
+  if (!data.ok) {
     throw new Error(data.message || 'Error al cargar tablero');
   }
 
@@ -495,7 +499,7 @@ async function refreshBoard(){
   ensureTimerLoop();
 }
 
-function bindActions(){
+function bindActions() {
   document.querySelectorAll('[data-action]').forEach(btn => {
     // evitar duplicar listener
     btn.removeEventListener('click', onActionClick);
@@ -523,7 +527,7 @@ function bindActions(){
   }
 
   const sortSel = document.getElementById('board-sort-order');
-  if(sortSel && !sortSel.dataset.bound){
+  if (sortSel && !sortSel.dataset.bound) {
     sortSel.dataset.bound = '1';
     sortSel.addEventListener('change', () => {
       boardSortOrder = sortSel.value || 'nombre';
@@ -535,7 +539,7 @@ function bindActions(){
   }
 
   document.querySelectorAll('.user-status-pill').forEach(pill => {
-    if(pill.dataset.bound) return;
+    if (pill.dataset.bound) return;
     pill.dataset.bound = '1';
     pill.addEventListener('click', () => {
       activeMobileColumn = pill.dataset.column || 'asignadas';
@@ -548,12 +552,12 @@ function bindActions(){
     });
   });
 
-  if(!document.documentElement.dataset.boardKbd){
+  if (!document.documentElement.dataset.boardKbd) {
     document.documentElement.dataset.boardKbd = '1';
     document.addEventListener('keydown', e => {
-      if((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')){
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         const inp = document.getElementById('search-actividad');
-        if(inp){
+        if (inp) {
           e.preventDefault();
           inp.focus();
         }
@@ -562,15 +566,15 @@ function bindActions(){
   }
 }
 
-function onPageClick(e){
+function onPageClick(e) {
   const btn = e.currentTarget;
   const pageAction = btn.dataset.pageAction;
   const columnKey = btn.dataset.columnKey;
-  if(!columnKey || !columnPage[columnKey]) return;
+  if (!columnKey || !columnPage[columnKey]) return;
 
-  if(pageAction === 'prev'){
+  if (pageAction === 'prev') {
     columnPage[columnKey] = Math.max(1, Number(columnPage[columnKey]) - 1);
-  } else if(pageAction === 'next'){
+  } else if (pageAction === 'next') {
     columnPage[columnKey] = Number(columnPage[columnKey]) + 1;
   }
   refreshBoard().catch(err => {
@@ -579,18 +583,18 @@ function onPageClick(e){
   });
 }
 
-async function onActionClick(e){
+async function onActionClick(e) {
   const btn = e.currentTarget;
   const actividadId = btn.dataset.actividadId;
   const accion = btn.dataset.action;
 
   setLoadingState(btn, true);
-  try{
-    if(accion === 'history'){
+  try {
+    if (accion === 'history') {
       await openHistory(actividadId);
       return;
     }
-    if(accion === 'notes'){
+    if (accion === 'notes') {
       openNotasModal(actividadId, btn.dataset.actividadTitle || '');
       return;
     }
@@ -601,31 +605,121 @@ async function onActionClick(e){
     fd.append('accion', accion);
 
     const res = await fetch(API_ACTION, {
-      method:'POST',
+      method: 'POST',
       body: fd,
-      credentials:'same-origin',
+      credentials: 'same-origin',
     });
-    const data = await res.json().catch(() => ({ ok:false, message:'Respuesta inválida del servidor' }));
-    if(!data.ok){
+    const data = await res.json().catch(() => ({ ok: false, message: 'Respuesta inválida del servidor' }));
+    if (!data.ok) {
       alert(data.message || 'Acción no permitida');
       return;
     }
 
     await refreshBoard();
-  }catch(err){
+  } catch (err) {
     alert(err.message || 'Error');
-  }finally{
+  } finally {
     setLoadingState(btn, false);
   }
 }
 
-function openNotasModal(actividadId, titulo){
+/** Actividad(es) del grupo "Servicios" donde se pide el detalle completo/inicial/final + terceros/mascota. */
+const NOTAS_SERVICIO_SUBTIPO_IDS = (() => {
+  const raw = typeof window !== 'undefined' ? window.__ACTIVIDAD_SERVICIO_SUBTIPO_IDS__ : null;
+  if (Array.isArray(raw)) {
+    const ids = raw.map(n => Math.floor(Number(n))).filter(n => n > 0);
+    if (ids.length) return ids;
+  }
+  return [10];
+})();
+
+function actividadPideSubtipoServicio(actividadId) {
+  return NOTAS_SERVICIO_SUBTIPO_IDS.includes(Number(actividadId) || 0);
+}
+
+function actualizarSubtiposServicio() {
+  const tipo = document.getElementById('actividadNotasServicioTipo');
+  const subtipoWrap = document.getElementById('actividadNotasServicioSubtipoWrap');
+  const subtipo = document.getElementById('actividadNotasServicioSubtipo');
+  const esTerceros = document.getElementById('actividadNotasEsTerceros');
+  const esMascota = document.getElementById('actividadNotasEsMascota');
+
+  if (!tipo || !subtipoWrap || !subtipo) return;
+
+  const valor = String(tipo.value || '').trim();
+
+  // Sin selección
+  if (!valor) {
+    subtipo.innerHTML = '<option value="">— seleccionar —</option>';
+    subtipo.disabled = true;
+    subtipoWrap.style.display = 'none';
+
+    if (esTerceros) esTerceros.checked = false;
+    if (esMascota) esMascota.checked = false;
+    return;
+  }
+
+  let opciones = [];
+
+  // Empresarial, Particular, OSF y Terceros
+  if (['empresarial', 'particular', 'osf', 'terceros'].includes(valor)) {
+    opciones = [
+      { value: 'completo', label: 'Completo' },
+      { value: 'inicial', label: 'Inicial' },
+      { value: 'final', label: 'Final' }
+    ];
+  }
+
+  // Mascotas
+  else if (valor === 'mascotas') {
+    opciones = [
+      { value: 'prevision', label: 'Previsión' },
+      { value: 'particular', label: 'Particular' }
+    ];
+  }
+
+  // Servicios no prestados
+  else if (valor === 'servicios_no_prestados') {
+    opciones = [
+      { value: 'negados', label: 'Negados' },
+      { value: 'no_prestados', label: 'No prestados' }
+    ];
+  }
+
+  subtipo.innerHTML = '<option value="">— seleccionar —</option>';
+
+  opciones.forEach(opcion => {
+    const option = document.createElement('option');
+    option.value = opcion.value;
+    option.textContent = opcion.label;
+    subtipo.appendChild(option);
+  });
+
+  subtipo.disabled = opciones.length === 0;
+  subtipoWrap.style.display = opciones.length > 0 ? '' : 'none';
+
+  // Mantener compatibilidad con los campos anteriores
+  if (esTerceros) {
+    esTerceros.checked = valor === 'terceros';
+  }
+
+  if (esMascota) {
+    esMascota.checked = valor === 'mascotas';
+  }
+}
+
+function openNotasModal(actividadId, titulo) {
   const modalEl = document.getElementById('actividadNotasModal');
   const sub = document.getElementById('actividadNotasModalSub');
   const inpFallecido = document.getElementById('actividadNotasFallecido');
   const inpFecha = document.getElementById('actividadNotasFecha');
   const inpObs = document.getElementById('actividadNotasObservaciones');
-  if(!modalEl || !sub || !inpFallecido || !inpFecha || !inpObs) return;
+  const servicioWrap = document.getElementById('actividadNotasServicioWrap');
+  const inpServicioTipo = document.getElementById('actividadNotasServicioTipo');
+  const inpServicioSubtipo = document.getElementById('actividadNotasServicioSubtipo');
+  const inpEsTerceros = document.getElementById('actividadNotasEsTerceros');
+  const inpEsMascota = document.getElementById('actividadNotasEsMascota');
+  if (!modalEl || !sub || !inpFallecido || !inpFecha || !inpObs) return;
 
   const ahora = new Date();
   notasContext = {
@@ -639,22 +733,35 @@ function openNotasModal(actividadId, titulo){
   inpFallecido.value = '';
   inpObs.value = '';
   inpFecha.value = formatNotaFechaDisplay(ahora);
+  if (inpServicioTipo) inpServicioTipo.value = '';
+
+  if (inpServicioSubtipo) {
+    inpServicioSubtipo.innerHTML = '<option value="">— seleccionar —</option>';
+    inpServicioSubtipo.value = '';
+    inpServicioSubtipo.disabled = true;
+  }
+
+  if (inpEsTerceros) inpEsTerceros.checked = false;
+  if (inpEsMascota) inpEsMascota.checked = false;
+  if (servicioWrap) {
+    servicioWrap.style.display = actividadPideSubtipoServicio(notasContext.actividadId) ? '' : 'none';
+  }
 
   const modal = window.bootstrap?.Modal?.getOrCreateInstance(modalEl);
-  if(modal){
+  if (modal) {
     modal.show();
     window.setTimeout(() => inpFallecido.focus(), 280);
   }
 }
 
-function formatEsCoDate(dateStr){
-  if(!dateStr) return '--';
+function formatEsCoDate(dateStr) {
+  if (!dateStr) return '--';
   const d = new Date(dateStr);
-  if(Number.isNaN(d.getTime())) return '--';
+  if (Number.isNaN(d.getTime())) return '--';
   return d.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-async function openHistory(actividadId){
+async function openHistory(actividadId) {
   const modalEl = document.getElementById('historialModal');
   const tbody = document.getElementById('historialTbody');
   const totalAc = document.getElementById('historialTotalAcumulado');
@@ -667,11 +774,11 @@ async function openHistory(actividadId){
   sub.textContent = 'Cargando...';
 
   const res = await fetch(`${API_HISTORIAL}?actividad_id=${encodeURIComponent(actividadId)}`, {
-    method:'GET',
-    credentials:'same-origin',
+    method: 'GET',
+    credentials: 'same-origin',
   });
-  const data = await res.json().catch(() => ({ ok:false, message:'Respuesta inválida del servidor' }));
-  if(!data.ok){
+  const data = await res.json().catch(() => ({ ok: false, message: 'Respuesta inválida del servidor' }));
+  if (!data.ok) {
     throw new Error(data.message || 'Error al cargar historial');
   }
 
@@ -683,7 +790,7 @@ async function openHistory(actividadId){
   totalAc.textContent = msToHMSFromSeconds(tiempo.tiempo_acumulado_seg || 0);
   totalAll.textContent = msToHMSFromSeconds(tiempo.tiempo_total_seg || 0);
 
-  if(intervalos.length === 0){
+  if (intervalos.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-muted small">Sin historial aún.</td></tr>`;
   } else {
     tbody.innerHTML = intervalos.map((it, idx) => {
@@ -704,57 +811,76 @@ async function openHistory(actividadId){
   }
 
   const modal = window.bootstrap?.Modal?.getOrCreateInstance(modalEl);
-  if(modal){
+  if (modal) {
     modal.show();
   }
 }
 
-async function initBoard(){
-  try{
-    if(!window.__boardResizeBound){
+async function initBoard() {
+  try {
+    if (!window.__boardResizeBound) {
       window.__boardResizeBound = '1';
       window.addEventListener('resize', () => syncColumnVisibility());
     }
     const notasSaveBtn = document.getElementById('actividadNotasSaveBtn');
-    if(notasSaveBtn && !notasSaveBtn.dataset.bound){
+    if (notasSaveBtn && !notasSaveBtn.dataset.bound) {
       notasSaveBtn.dataset.bound = '1';
       notasSaveBtn.addEventListener('click', async () => {
         const inpFallecido = document.getElementById('actividadNotasFallecido');
         const inpObs = document.getElementById('actividadNotasObservaciones');
-        if(!inpFallecido || !inpObs) return;
+        const inpServicioTipo = document.getElementById('actividadNotasServicioTipo');
+        const inpServicioSubtipo = document.getElementById('actividadNotasServicioSubtipo');
+        const inpEsTerceros = document.getElementById('actividadNotasEsTerceros');
+        const inpEsMascota = document.getElementById('actividadNotasEsMascota');
+        if (!inpFallecido || !inpObs) return;
 
         const fechaGuardar = new Date().toISOString();
         setLoadingState(notasSaveBtn, true);
-        try{
+        try {
           const nota = await saveNotaActividad({
             actividadId: notasContext.actividadId,
             fallecido: inpFallecido.value,
             fecha: fechaGuardar,
             observaciones: inpObs.value,
+            servicioTipo: inpServicioTipo ? inpServicioTipo.value : '',
+            servicioSubtipo: inpServicioSubtipo ? inpServicioSubtipo.value : '',
+            esTerceros: inpEsTerceros ? inpEsTerceros.checked : false,
+            esMascota: inpEsMascota ? inpEsMascota.checked : false,
           });
-          if(nota && nota.fecha){
+          if (nota && nota.fecha) {
             notasContext.fechaIso = String(nota.fecha);
             const inpFecha = document.getElementById('actividadNotasFecha');
-            if(inpFecha){
+            if (inpFecha) {
               inpFecha.value = formatNotaFechaDisplay(nota.fecha);
             }
           }
           const modalEl = document.getElementById('actividadNotasModal');
           const modal = window.bootstrap?.Modal?.getOrCreateInstance(modalEl);
-          if(modal){
+          if (modal) {
             modal.hide();
           }
-        }catch(err){
+        } catch (err) {
           alert(err.message || 'Error al guardar la nota');
-        }finally{
+        } finally {
           setLoadingState(notasSaveBtn, false);
         }
       });
     }
+
+    const servicioTipo = document.getElementById('actividadNotasServicioTipo');
+
+if(servicioTipo && !servicioTipo.dataset.subtipoBound){
+  servicioTipo.dataset.subtipoBound = '1';
+
+  servicioTipo.addEventListener('change', () => {
+    actualizarSubtiposServicio();
+  });
+}
+
     await refreshBoard();
     tickRunningTimers();
     ensureTimerLoop();
-  }catch(err){
+  } catch (err) {
     console.error(err);
     alert(err.message || 'Error al iniciar tablero');
   }
@@ -766,4 +892,3 @@ if (document.readyState === 'loading') {
 } else {
   initBoard();
 }
-
