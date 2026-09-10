@@ -4,11 +4,11 @@
  */
 
 define('DB_HOST', 'localhost');
-//define('DB_USER', 'osfcomco_control_sedes');
-// define('DB_PASS', 'tgp4dxcoSXB184EH');
+define('DB_USER', 'osfcomco_control_sedes');
+define('DB_PASS', 'tgp4dxcoSXB184EH');
 // configuracion para usar base de datos local
-define('DB_USER', 'root'); 
-define('DB_PASS', '');
+// define('DB_USER', 'root'); 
+// define('DB_PASS', '');
 define('DB_NAME', 'osfcomco_control_sedes');
 define('DB_CHARSET', 'utf8mb4');
 
