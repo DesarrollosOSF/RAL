@@ -217,34 +217,9 @@ if (isset($_GET['export']) && ($_GET['export'] === 'xls' || $_GET['export'] === 
 
   if ($exportMode === 'ral') {
     if ($exportType === 'xls') {
-      // Cabeceras HTTP para descarga de archivo Excel (.xls)
-      header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
-      header('Content-Disposition: attachment; filename="reporte_RAL_' . $fechaDesde . '_' . $fechaHasta . '.xls"');
-      header('Cache-Control: max-age=0');
-
-      echo '<!DOCTYPE html>';
-      echo '<html><head><meta charset="UTF-8"><style>';
-      echo 'table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }';
-      echo 'th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 13px; }';
-      echo 'th { background-color: #2563eb; color: #ffffff; font-weight: bold; }';
-      echo '.text-end { text-align: right; }';
-      echo '.bold { font-weight: bold; }';
-      echo '</style></head><body>';
-      echo '<table>';
-      echo '<thead><tr>';
-      echo '<th>Usuario</th>';
-      echo '<th>Sede</th>';
-      echo '<th class="text-end">Días hábiles mes</th>';
-      echo '<th class="text-end">Vacaciones</th>';
-      echo '<th class="text-end">Permisos</th>';
-      echo '<th class="text-end">Compensatorios</th>';
-      echo '<th class="text-end">Días efectivos</th>';
-      echo '<th class="text-end">Tiempo total (hh:mm:ss)</th>';
-      echo '<th class="text-end">Tiempo en días jornada</th>';
-      echo '<th class="text-end">Cumplimiento %</th>';
-      echo '</tr></thead><tbody>';
-
+      // === Recolectar datos de la Tabla 1: RAL - Días hábiles y cumplimiento (por usuario) ===
       $tmpUsers = $pdo->query("SELECT id,nombre_completo FROM usuarios ORDER BY nombre_completo ASC")->fetchAll();
+      $ralRowsExport = [];
       foreach ($tmpUsers as $tu) {
         $uid = (int)$tu['id'];
         if ($usuarioId !== 'all' && (int)$usuarioId !== $uid) continue;
@@ -268,21 +243,156 @@ if (isset($_GET['export']) && ($_GET['export'] === 'xls' || $_GET['export'] === 
 
         $cumpl = $calc['efectivos'] > 0 ? (segundosADiasJornada($totSeg) / $calc['efectivos'] * 100) : 0;
 
-        echo '<tr>';
-        echo '<td>' . htmlspecialchars($tu['nombre_completo'], ENT_QUOTES, 'UTF-8') . '</td>';
-        echo '<td>' . htmlspecialchars($sede, ENT_QUOTES, 'UTF-8') . '</td>';
-        echo '<td class="text-end">' . (int)$calc['habiles'] . '</td>';
-        echo '<td class="text-end">' . ($vac ? number_format($vac, 2, ',', '.') : '—') . '</td>';
-        echo '<td class="text-end">' . ($perm ? number_format($perm, 2, ',', '.') : '—') . '</td>';
-        echo '<td class="text-end">' . ($comp ? number_format($comp, 2, ',', '.') : '—') . '</td>';
-        echo '<td class="text-end bold">' . number_format($calc['efectivos'], 2, ',', '.') . '</td>';
-        echo '<td class="text-end">' . htmlspecialchars(msOrSegToHMSFromSeconds($totSeg), ENT_QUOTES, 'UTF-8') . '</td>';
-        echo '<td class="text-end">' . htmlspecialchars(formatDiasJornada($totSeg), ENT_QUOTES, 'UTF-8') . '</td>';
-        echo '<td class="text-end bold">' . number_format($cumpl, 1, ',', '.') . '%</td>';
-        echo '</tr>';
+        $ralRowsExport[] = [
+          'nombre' => (string)$tu['nombre_completo'],
+          'sede' => (string)$sede,
+          'habiles' => (int)$calc['habiles'],
+          'vac' => $vac,
+          'perm' => $perm,
+          'comp' => $comp,
+          'efectivos' => (float)$calc['efectivos'],
+          'seg' => (int)$totSeg,
+          'cumpl' => $cumpl,
+        ];
       }
 
-      echo '</tbody></table></body></html>';
+      // === Recolectar datos de la Tabla 2: Detalle Actividad / Grupo / Usuario / Tiempo ===
+      $rowsDetalleExport = fetchReporteTiempoRows($pdo, $fechaDesde, $fechaHasta, $usuarioId, $actividadIds, true);
+      $idsUsuariosExport = [];
+      $idsActividadesExport = [];
+      $sumaTotalDetalle = 0;
+      $detalleFilas = [];
+      foreach ($rowsDetalleExport as $r) {
+        $idsUsuariosExport[(int)$r['usuario_id']] = true;
+        $idsActividadesExport[(int)$r['actividad_id']] = true;
+        $sumaTotalDetalle += (int)$r['total_seg'];
+
+        $stmtG = $pdo->prepare("SELECT ag.nombre FROM actividades act LEFT JOIN actividad_grupos ag ON ag.id=act.grupo_id WHERE act.id=?");
+        $stmtG->execute([(int)$r['actividad_id']]);
+        $gNombre = $stmtG->fetchColumn() ?: 'Sin grupo';
+
+        $detalleFilas[] = [
+          'actividad' => (string)$r['titulo'],
+          'grupo' => (string)$gNombre,
+          'usuario' => (string)$r['nombre_completo'],
+          'seg' => (int)$r['total_seg'],
+        ];
+      }
+      $kpiUsuariosExport = count($idsUsuariosExport);
+      $kpiActividadesExport = count($idsActividadesExport);
+      $kpiPromedioExport = $kpiUsuariosExport > 0 ? (int)round($sumaTotalDetalle / $kpiUsuariosExport) : 0;
+
+      // === Texto legible de los filtros aplicados ===
+      $filtroUsuarioTxt = 'Todos';
+      if ($usuarioId !== 'all') {
+        $stmtUn = $pdo->prepare("SELECT nombre_completo FROM usuarios WHERE id=?");
+        $stmtUn->execute([(int)$usuarioId]);
+        $filtroUsuarioTxt = $stmtUn->fetchColumn() ?: ('ID ' . $usuarioId);
+      }
+      $filtroActividadTxt = 'Todas';
+      if (!$filtroTodasActividades) {
+        $placeholders = implode(',', array_fill(0, count($actividadIds), '?'));
+        $stmtAn = $pdo->prepare("SELECT titulo FROM actividades WHERE id IN ($placeholders)");
+        $stmtAn->execute($actividadIds);
+        $filtroActividadTxt = implode(', ', $stmtAn->fetchAll(PDO::FETCH_COLUMN));
+      }
+
+      // === Cabeceras HTTP para descarga de archivo Excel (.xls) ===
+      header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+      header('Content-Disposition: attachment; filename="reporte_RAL_completo_' . $fechaDesde . '_' . $fechaHasta . '.xls"');
+      header('Cache-Control: max-age=0');
+
+      echo '<!DOCTYPE html>';
+      echo '<html><head><meta charset="UTF-8"><style>';
+      echo 'body { font-family: Arial, sans-serif; }';
+      echo 'table { border-collapse: collapse; width: 100%; margin-bottom: 22px; }';
+      echo 'th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 13px; }';
+      echo 'th { background-color: #2563eb; color: #ffffff; font-weight: bold; }';
+      echo '.text-end { text-align: right; }';
+      echo '.bold { font-weight: bold; }';
+      echo '.section-title { font-size: 15px; font-weight: bold; background-color: #1e293b; color: #ffffff; padding: 8px; margin-top: 10px; }';
+      echo '.kpi-table { margin-bottom: 10px; }';
+      echo '.kpi-table td { border: none; padding: 3px 8px; font-size: 13px; }';
+      echo '.kpi-label { color: #475569; }';
+      echo '.kpi-value { font-weight: bold; color: #1e293b; }';
+      echo '</style></head><body>';
+
+      // ===== Encabezado con filtros aplicados =====
+      echo '<table class="kpi-table">';
+      echo '<tr><td class="kpi-label">Reporte</td><td class="kpi-value">Reporte de tiempo y cumplimiento RAL</td></tr>';
+      echo '<tr><td class="kpi-label">Rango de fechas</td><td class="kpi-value">' . htmlspecialchars($fechaDesde . ' a ' . $fechaHasta, ENT_QUOTES, 'UTF-8') . '</td></tr>';
+      echo '<tr><td class="kpi-label">Usuario filtrado</td><td class="kpi-value">' . htmlspecialchars((string)$filtroUsuarioTxt, ENT_QUOTES, 'UTF-8') . '</td></tr>';
+      echo '<tr><td class="kpi-label">Actividad(es) filtrada(s)</td><td class="kpi-value">' . htmlspecialchars((string)$filtroActividadTxt, ENT_QUOTES, 'UTF-8') . '</td></tr>';
+      echo '<tr><td class="kpi-label">Generado el</td><td class="kpi-value">' . htmlspecialchars(date('Y-m-d H:i'), ENT_QUOTES, 'UTF-8') . '</td></tr>';
+      echo '</table>';
+
+      // ===== KPIs generales =====
+      echo '<table class="kpi-table">';
+      echo '<tr><td class="kpi-label">Usuarios con actividad</td><td class="kpi-value">' . (int)$kpiUsuariosExport . '</td></tr>';
+      echo '<tr><td class="kpi-label">Actividades distintas</td><td class="kpi-value">' . (int)$kpiActividadesExport . '</td></tr>';
+      echo '<tr><td class="kpi-label">Tiempo total (todos los usuarios)</td><td class="kpi-value">' . htmlspecialchars(msOrSegToHMSFromSeconds($sumaTotalDetalle), ENT_QUOTES, 'UTF-8') . '</td></tr>';
+      echo '<tr><td class="kpi-label">Promedio de tiempo por usuario</td><td class="kpi-value">' . htmlspecialchars(msOrSegToHMSFromSeconds($kpiPromedioExport), ENT_QUOTES, 'UTF-8') . '</td></tr>';
+      echo '</table>';
+
+      // ===== Tabla 1: RAL - Días hábiles y cumplimiento =====
+      echo '<div class="section-title">Reporte RAL — Días hábiles y cumplimiento</div>';
+      echo '<table>';
+      echo '<thead><tr>';
+      echo '<th>Usuario</th>';
+      echo '<th>Sede</th>';
+      echo '<th class="text-end">Días hábiles mes</th>';
+      echo '<th class="text-end">Vacaciones</th>';
+      echo '<th class="text-end">Permisos</th>';
+      echo '<th class="text-end">Compensatorios</th>';
+      echo '<th class="text-end">Días efectivos</th>';
+      echo '<th class="text-end">Tiempo total (hh:mm:ss)</th>';
+      echo '<th class="text-end">Tiempo en días jornada</th>';
+      echo '<th class="text-end">Cumplimiento %</th>';
+      echo '</tr></thead><tbody>';
+      if (empty($ralRowsExport)) {
+        echo '<tr><td colspan="10" class="text-end">Sin datos para el filtro seleccionado.</td></tr>';
+      }
+      foreach ($ralRowsExport as $rr) {
+        echo '<tr>';
+        echo '<td>' . htmlspecialchars($rr['nombre'], ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td>' . htmlspecialchars($rr['sede'], ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td class="text-end">' . (int)$rr['habiles'] . '</td>';
+        echo '<td class="text-end">' . ($rr['vac'] ? number_format($rr['vac'], 2, ',', '.') : '—') . '</td>';
+        echo '<td class="text-end">' . ($rr['perm'] ? number_format($rr['perm'], 2, ',', '.') : '—') . '</td>';
+        echo '<td class="text-end">' . ($rr['comp'] ? number_format($rr['comp'], 2, ',', '.') : '—') . '</td>';
+        echo '<td class="text-end bold">' . number_format($rr['efectivos'], 2, ',', '.') . '</td>';
+        echo '<td class="text-end">' . htmlspecialchars(msOrSegToHMSFromSeconds($rr['seg']), ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td class="text-end">' . htmlspecialchars(formatDiasJornada($rr['seg']), ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td class="text-end bold">' . number_format($rr['cumpl'], 1, ',', '.') . '%</td>';
+        echo '</tr>';
+      }
+      echo '</tbody></table>';
+
+      // ===== Tabla 2: Detalle Actividad, Grupo, Usuario y Tiempo =====
+      echo '<div class="section-title">Reportes Actividad, Usuarios y Tiempo (detalle)</div>';
+      echo '<table>';
+      echo '<thead><tr>';
+      echo '<th>Actividad</th>';
+      echo '<th>Grupo RAL</th>';
+      echo '<th>Usuario</th>';
+      echo '<th class="text-end">Tiempo total (hh:mm:ss)</th>';
+      echo '<th class="text-end">Tiempo en días</th>';
+      echo '</tr></thead><tbody>';
+      if (empty($detalleFilas)) {
+        echo '<tr><td colspan="5" class="text-end">Sin datos para el filtro seleccionado.</td></tr>';
+      }
+      foreach ($detalleFilas as $df) {
+        echo '<tr>';
+        echo '<td>' . htmlspecialchars($df['actividad'], ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td>' . htmlspecialchars($df['grupo'], ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td>' . htmlspecialchars($df['usuario'], ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td class="text-end">' . htmlspecialchars(msOrSegToHMSFromSeconds($df['seg']), ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '<td class="text-end">' . htmlspecialchars(formatDiasJornada($df['seg']), ENT_QUOTES, 'UTF-8') . '</td>';
+        echo '</tr>';
+      }
+      echo '</tbody></table>';
+
+      echo '</body></html>';
       exit;
     }
 
